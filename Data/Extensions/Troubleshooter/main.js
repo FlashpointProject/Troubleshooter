@@ -27,26 +27,30 @@ const ERROR_DRI0M = `
 const WEIRD_DRI0M = `
     Found an unexpected response while taking to Flashpoint Infinity's servers.
     Filtering software from your router or ISP may be interfering.
+    Do you want to switch to the backup server?
 `;
-
-const KNOWN_BAD_STRINGS_AND_RESPONSES = [
-    ["SHP Redirector", `
-        McAfee software on your router may be blocking access to Flashpoint's servers
-        See https://service.mcafee.com/webcenter/portal/cp/home/articleview?locale=en_US&articleId=TS102694 for advice on how to disable
-        Or delete the line beginning with "Dri0m" from Legacy/router_base_urls.txt
-    `]
-];
 
 let INITED_resolve;
 let INITED = new Promise((resolve, reject) => {
     INITED_resolve = resolve;
 });
 
-function messageBox(message) {
-    INITED.then(() => {
-        flashpoint.log.info(`Showing error: ${message}`);
-        flashpoint.dialogs.showMessageBox({message: message, type: "error"}).catch(e => flashpoint.log.error(`Error showing message box: ${e}`));
-    });
+async function messageBox(options) {
+    await INITED;
+    flashpoint.log.info(`Showing error: ${options.message}`);
+    if(!options.type) options.type = "error";
+    let info_button = options.info?.button ?? "no info button"; // I'm unsure if showMessageBox ever returns null
+    let noninfo = false
+    let result;
+    do {
+        result = await flashpoint.dialogs.showMessageBox(options);
+        if(result === info_button) {
+            // TODO: URL
+        } else {
+            noninfo = true;
+        }
+    } while(!noninfo)
+    return result;
 }
 
 async function activate(context) {
@@ -57,28 +61,23 @@ async function activate(context) {
 
 async function checkRouterPHP() {
     try {
-        let routerPHP = await fs.promises.readFile(path.join(fpPath, "Legacy", "router.php"));
+        let routerPHP = await fs.promises.readFile(path.join(fpPath, "Legacy", "router.php"), "utf8");
         if(routerPHP.indexOf('<?php') === -1) {
-            messageBox(WEIRD_ROUTER_PHP);
+            await messageBox({message: WEIRD_ROUTER_PHP});
         }
     } catch(e) {
         flashpoint.log.error(`Error checking for router.php: ${e}`);
-        messageBox(ERROR_ROUTER_PHP);
+        await messageBox({message: ERROR_ROUTER_PHP});
     }
 }
 
 function getAll(url) {
     return new Promise((resolve, reject) => {
         let req = http.get(url, (res) => {
-            if(res.statusCode !== 200) {
-                reject(`HTTP failure: ${res.statusCode}`);
-            } else {
-                res.setEncoding('utf8');
-                let data = '';
-                res.on('data', (chunk) => {data += chunk});
-                res.on('end', () => {resolve(data);});
-                res.on()
-            }
+            res.setEncoding('utf8');
+            let data = '';
+            res.on('data', (chunk) => {data += chunk});
+            res.on('end', () => {resolve(data);});
         });
         req.on('error', (e) => reject(`ERROR getting DRi0m test url: ${e}`));
     });
@@ -90,23 +89,16 @@ async function checkInfinityServer() {
     try {
         let test = await getAll(DRI0M_URL);
         if(test.indexOf(DRI0M_TEST_STRING) === -1) {
-            let responded = false;
-            for(let str_response of KNOWN_BAD_STRINGS_AND_RESPONSES) {
-                let str = str_response[0];
-                let response = str_response[1];
-                if(test.indexOf(str) !== -1) {
-                    messageBox(response);
-                    responded = true;
-                    break;
-                }
-            }
-            if(!responded) {
-                messageBox(WEIRD_DRI0M);
+            let choice = await messageBox({message: WEIRD_DRI0M, buttons: ["Yes", "No", "More Information"], info: {button: 2, link: "https://bluemaxima.org/flashpoint/datahub/Extended_FAQ#WhiteScreenAndNoImages"}});
+            if(choice === 0) {
+                let router_base_urls = await fs.promises.readFile(path.join(fpPath, "Legacy", "router_base_urls.txt"), "utf8");
+                let new_router_base_urls = router_base_urls.replace(/Dri0m.*/, "");
+                await fs.promises.writeFile(path.join(fpPath, "Legacy", "router_base_urls.txt"), new_router_base_urls);
             }
         }
     } catch(e) {
         flashpoint.log.error(`Unable to reach Dri0m server: ${e}`);
-        messageBox(ERROR_DRI0M);
+        await messageBox({message: ERROR_DRI0M});
     }
 }
 
