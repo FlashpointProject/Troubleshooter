@@ -85,7 +85,7 @@ function getAll(url) {
 
 async function checkInfinityServer() {
     let version = await fs.promises.readFile(path.join(fpPath, "version.txt"));
-    if(version.indexOf("Infinity") === -1) return;
+    if(flashpoint.config.server !== "PHP Router") return;
     try {
         let test = await getAll(DRI0M_URL);
         if(test.indexOf(DRI0M_TEST_STRING) === -1) {
