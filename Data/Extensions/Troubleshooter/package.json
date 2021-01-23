@@ -1,0 +1,9 @@
+{
+  "name": "troubleshooter",
+  "displayName": "Troubleshooter",
+  "author": "Sgeo",
+  "version": "0.0.1",
+  "launcherVersion": "9.0.0",
+  "description": "Detects a few common issues",
+  "main": "./main.js"
+}
